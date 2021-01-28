@@ -1,0 +1,53 @@
+name: $(BuildDefinitionName).$(Date:yyyyMMdd)$(Rev:.r)
+pool:
+  vmImage: ubuntu-16.04
+
+variables:
+  - group: default-iac-variables
+
+stages :
+  - stage: Terraform
+    jobs:
+    - job: MainJob
+      continueOnError: false
+      steps:
+      - task: InstallSSHKey@0
+        displayName: 'Install SSH Key for Terraform Module Repository Access'
+        inputs:
+          hostName: ssh.dev.azure.com
+          knownHostsEntry: $(devops-tf-modules-access-knownhost)
+          sshKeySecureFile: devops-tf-modules-access-key
+          RunAsPreJob: false
+      - script: |
+          terraform init
+          terraform --version
+        displayName: 'Terraform Init'
+        workingDirectory: $(Build.SourcesDirectory)/test
+      - script: |
+          terraform validate
+        displayName: 'Terraform Validate'
+        workingDirectory: $(Build.SourcesDirectory)/test
+      - script: |
+          terraform plan -var subscription_id=$subscription -var client_id=$id -var client_secret=$secret -var tenant_id=$tenant -var resource_group_name=$rg -out=tfplan -no-color -input=false
+        displayName: 'Terraform Plan'
+        workingDirectory: $(Build.SourcesDirectory)/test
+        env:
+          rg: $(tf-rg)
+          id: $(tf-sp-id)
+          secret: $(tf-sp-secret)
+          tenant: $(tf-tenant-id)
+          subscription: $(tf-subscription-id)
+      - script: |
+          terraform apply --auto-approve tfplan
+        displayName: 'Terraform Apply'
+        workingDirectory: $(Build.SourcesDirectory)/test
+      - script: |
+          terraform destroy --auto-approve -var subscription_id=$subscription -var client_id=$id -var client_secret=$secret -var tenant_id=$tenant -var resource_group_name=$rg
+        displayName: 'Terraform Destroy'
+        workingDirectory: $(Build.SourcesDirectory)/test
+        env:
+          rg: $(tf-rg)
+          id: $(tf-sp-id)
+          secret: $(tf-sp-secret)
+          tenant: $(tf-tenant-id)
+          subscription: $(tf-subscription-id)
